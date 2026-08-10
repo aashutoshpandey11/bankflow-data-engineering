@@ -1,9 +1,14 @@
 import os
+from pathlib import Path
 
+import pandas as pd
 import snowflake.connector
 from dotenv import load_dotenv
 
 load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BASE_DIR / "data" / "processed"
 
 conn = snowflake.connector.connect(
     account=os.getenv("SNOWFLAKE_ACCOUNT"),
@@ -14,19 +19,55 @@ conn = snowflake.connector.connect(
     schema=os.getenv("SNOWFLAKE_SCHEMA"),
 )
 
-try:
+TABLES = {
+    "customers_clean.csv": "CUSTOMERS",
+    "accounts_clean.csv": "ACCOUNTS",
+    "merchants_clean.csv": "MERCHANTS",
+    "transactions_clean.csv": "TRANSACTIONS",
+}
+
+
+def load_csv_to_snowflake(csv_file, table_name):
+    file_path = DATA_DIR / csv_file
+
+    print(f"Loading {csv_file} → RAW.{table_name}")
+
+    df = pd.read_csv(file_path)
+
+    columns = list(df.columns)
+
+    column_names = ", ".join(columns)
+    placeholders = ", ".join(["%s"] * len(columns))
+
+    insert_sql = f"""
+        INSERT INTO {table_name} ({column_names})
+        VALUES ({placeholders})
+    """
+
     cursor = conn.cursor()
 
-    cursor.execute("SELECT CURRENT_ACCOUNT(), CURRENT_USER(), CURRENT_DATABASE(), CURRENT_SCHEMA()")
+    try:
+        rows = [tuple(row) for row in df.itertuples(index=False, name=None)]
 
-    result = cursor.fetchone()
+        cursor.executemany(insert_sql, rows)
 
-    print("✅ Snowflake connection successful!")
-    print(f"Account: {result[0]}")
-    print(f"User: {result[1]}")
-    print(f"Database: {result[2]}")
-    print(f"Schema: {result[3]}")
+        print(f"✓ Loaded {len(rows):,} rows into RAW.{table_name}")
+
+    finally:
+        cursor.close()
+
+
+try:
+    print("Starting BankFlow Snowflake loading...")
+    print()
+
+    for csv_file, table_name in TABLES.items():
+        load_csv_to_snowflake(csv_file, table_name)
+
+    print()
+    print("===================================")
+    print("BANKFLOW SNOWFLAKE LOAD COMPLETED")
+    print("===================================")
 
 finally:
-    cursor.close()
     conn.close()
