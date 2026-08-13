@@ -20,9 +20,6 @@ conn = snowflake.connector.connect(
 )
 
 TABLES = {
-    "customers_clean.csv": "CUSTOMERS",
-    "accounts_clean.csv": "ACCOUNTS",
-    "merchants_clean.csv": "MERCHANTS",
     "transactions_clean.csv": "TRANSACTIONS",
 }
 
